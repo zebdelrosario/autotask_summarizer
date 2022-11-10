@@ -1,5 +1,5 @@
 import os.path
-
+import numpy as np
 import pandas as pd
 from openpyxl import load_workbook
 
@@ -18,6 +18,7 @@ def main():
     closed_overdue_tickets = get_closed_overdue_tickets(ticket_df, 'Due', 'Resolved Time')
     open_overdue_tickets = get_open_overdue_tickets(ticket_df, 'Due', 'Resolved Time')
     all_overdue_tickets = get_all_overdue_tickets(ticket_df, 'Due', 'Resolved Time')
+    overdue_ticket_numbers = get_all_overdue_ticket_numbers(ticket_df, 'Due', 'Resolved Time')
     #   TURN LIST INTO DATAFRAME
     overdue_df = get_overdue_summary(ticket_df, all_overdue_tickets)
 #     Get resource time summary
@@ -25,11 +26,19 @@ def main():
     # print(resource_summary)
     complete_resource_summary = pd.concat([resource_time_summary, resource_summary.rename('Tickets Assigned')], axis=1)
     print('Preparing Data...')
+#   Sheet Styling
+    highlighted_rows = ticket_df['Ticket Number'].isin(overdue_ticket_numbers).map({
+        True: 'background-color: yellow',
+        False: ''
+    })
+    styler = ticket_df.style.apply(lambda _: highlighted_rows)
 #   Write to EXCEL
     out_file_name = input('Output file name:\n>') + '.xlsx'
     with pd.ExcelWriter(out_file_name) as writer:
         ticket_df.to_excel(writer, sheet_name='raw_data')
         print('Preparing File')
+        styler.to_excel(writer, sheet_name='raw_data')
+        print('Highlighting cells...')
         issue_summary.to_excel(writer, sheet_name='summary', startcol=0)
         print('Writing Issue Types...')
         complete_resource_summary.to_excel(writer, sheet_name='summary', startcol=4)
@@ -70,6 +79,16 @@ def get_count(dataframe, column):
 def get_sum(dataframe, column):
     """Get total sum of entries in column."""
     return dataframe[column].sum
+
+
+def get_all_overdue_ticket_numbers(dataframe, due_date, resolved):
+    """Get a list of overdue ticket numbers."""
+    resolved_column = pd.to_datetime(dataframe[resolved], dayfirst=True).dt.day
+    due_column = pd.to_datetime(dataframe[due_date], dayfirst=True).dt.day
+    difference = due_column - resolved_column
+    overdue_tickets = dataframe.where((due_column - resolved_column < 0)).dropna()['Ticket Number']
+    overdue_ticket_numbers = sorted(i for i in overdue_tickets)
+    return overdue_ticket_numbers
 
 
 def get_all_overdue_tickets(dataframe, due_date, resolved):
